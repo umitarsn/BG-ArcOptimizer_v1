@@ -34,20 +34,31 @@ def train_rf_model(
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, random_state=random_state
     )
+
     model = RandomForestRegressor(
         n_estimators=n_estimators,
         random_state=random_state,
         n_jobs=-1,
     )
     model.fit(X_train, y_train)
+
     y_pred = model.predict(X_test)
+
+    mse = float(mean_squared_error(y_test, y_pred))
+    rmse = float(np.sqrt(mse))
+
     metrics = {
         "MAE": float(mean_absolute_error(y_test, y_pred)),
-        "MSE": float(mean_squared_error(y_test, y_pred)),
-        "RMSE": float(mean_squared_error(y_test, y_pred, squared=False)),
+        "MSE": mse,
+        "RMSE": rmse,
         "R2": float(r2_score(y_test, y_pred)),
     }
-    return {"model": model, "metrics": metrics}
+
+    return {
+        "model": model,
+        "metrics": metrics,
+    }
+
 
 def ensure_session_keys():
     if "raw_df" not in st.session_state:
