@@ -18,13 +18,19 @@ st.set_page_config(
 def load_csv(file_bytes: bytes) -> pd.DataFrame:
     return pd.read_csv(io.BytesIO(file_bytes))
 
-def split_features_target(df, target_col):
+def split_features_target(df: pd.DataFrame, target_col: str):
     feature_cols = [c for c in df.columns if c != target_col]
     X = df[feature_cols].values
     y = df[target_col].values
     return X, y, feature_cols
 
-def train_rf_model(X, y, test_size=0.2, random_state=42, n_estimators=200):
+def train_rf_model(
+    X: np.ndarray,
+    y: np.ndarray,
+    test_size: float = 0.2,
+    random_state: int = 42,
+    n_estimators: int = 200,
+):
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, random_state=random_state
     )
@@ -93,7 +99,9 @@ if page.startswith("1"):
         df = load_csv(uploaded.getvalue())
         st.session_state["raw_df"] = df
         st.success(f"{uploaded.name} yüklendi ({df.shape[0]} satır).")
+        st.subheader("İlk 50 satır")
         st.dataframe(df.head(50))
+        st.subheader("İstatistikler")
         st.dataframe(df.describe().transpose())
     else:
         st.info("CSV yükle.")
@@ -105,20 +113,26 @@ elif page.startswith("2"):
         st.warning("Önce CSV yükle.")
     else:
         numeric_cols = df.select_dtypes(include=["int64","float64"]).columns.tolist()
-        target_col = st.selectbox("Hedef kolon:", numeric_cols)
-        feature_cols = st.multiselect(
-            "Feature kolonlar:", numeric_cols, default=[c for c in numeric_cols if c != target_col]
-        )
-        test_size = st.slider("Test oranı", 0.1, 0.4, 0.2)
-        n_estimators = st.slider("Ağaç sayısı", 50, 500, 200)
+        if not numeric_cols:
+            st.error("Sayısal kolon yok.")
+        else:
+            target_col = st.selectbox("Hedef kolon:", numeric_cols)
+            feature_cols = st.multiselect(
+                "Feature kolonlar:", numeric_cols, default=[c for c in numeric_cols if c != target_col]
+            )
+            test_size = st.slider("Test oranı", 0.1, 0.4, 0.2)
+            n_estimators = st.slider("Ağaç sayısı", 50, 500, 200)
 
-        if feature_cols and st.button("Modeli Eğit"):
-            model_df = df[feature_cols + [target_col]].dropna()
-            X, y, _ = split_features_target(model_df, target_col)
-            result = train_rf_model(X, y, test_size, n_estimators=n_estimators)
-            set_model(result["model"], feature_cols, target_col, result["metrics"])
-            st.success("Model eğitildi.")
-            st.write(result["metrics"])
+            if feature_cols and st.button("Modeli Eğit"):
+                model_df = df[feature_cols + [target_col]].dropna()
+                X, y, _ = split_features_target(model_df, target_col)
+                result = train_rf_model(X, y, test_size, n_estimators=n_estimators)
+                set_model(result["model"], feature_cols, target_col, result["metrics"])
+                st.success("Model eğitildi.")
+                st.subheader("Metrikler")
+                st.json(result["metrics"])
+            elif not feature_cols:
+                st.error("En az bir feature seç.")
 
 elif page.startswith("3"):
     st.title("3) Tek Heat Tahmini")
@@ -142,9 +156,14 @@ elif page.startswith("4"):
         uploaded = st.file_uploader("Batch CSV yükle", type=["csv"])
         if uploaded:
             df = load_csv(uploaded.getvalue())
-            preds = model.predict(df[feature_cols].values)
-            df[f"pred_{target_col}"] = preds
-            st.dataframe(df.head(50))
-            buf = io.StringIO()
-            df.to_csv(buf, index=False)
-            st.download_button("İndir", buf.getvalue(), "batch_predictions.csv")
+            missing = [c for c in feature_cols if c not in df.columns]
+            if missing:
+                st.error("Eksik kolonlar: " + ", ".join(missing))
+            else:
+                preds = model.predict(df[feature_cols].values)
+                df[f"pred_{target_col}"] = preds
+                st.subheader("Sonuç (ilk 50)")
+                st.dataframe(df.head(50))
+                buf = io.StringIO()
+                df.to_csv(buf, index=False)
+                st.download_button("Sonuçları indir", buf.getvalue(), "batch_predictions.csv")
